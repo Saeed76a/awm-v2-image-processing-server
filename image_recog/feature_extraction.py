@@ -7,7 +7,15 @@ from collections import OrderedDict
 from transformers import AutoImageProcessor, AutoModel
 import faiss
 import numpy as np
+import logging
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
+logger = logging.getLogger(__name__)
 # root_dir = './Fruits-30/FruitImageDataset'
 class FeatureExtraction:
     def __init__(self, root_dir, device, processor, model):
@@ -19,22 +27,20 @@ class FeatureExtraction:
         # image labels
         self.label_dict = dict()
 
-    def _random_noise(image_tensor, mean=0, std=0.1):
+    def _random_noise(self, image_tensor, mean=0, std=0.1):
         """이미지에 랜덤 노이즈 추가."""
         noise = torch.randn_like(image_tensor) * std + mean
         noisy_image = image_tensor + noise
         noisy_image = torch.clamp(noisy_image, 0, 1)
-        # 텐서 이미지를 다시 PIL Image 타입으로 변환 후 반환
         return noisy_image
     def _get_transform_compose(self):
-        # 트랜스폼 리스트 생성
         return transforms.Compose([
-            transforms.RandomResizedCrop(224, antialias=True),  # antialias 추가
+            transforms.RandomResizedCrop(224, antialias=True),
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
             transforms.RandomRotation(30),
             transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)), 
+            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
             transforms.RandomPerspective(distortion_scale=0.1),
             transforms.RandomAdjustSharpness(sharpness_factor=2),
             transforms.ToTensor(),
@@ -49,19 +55,22 @@ class FeatureExtraction:
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
     # image List 생성 및 Label(location id 리스트) 생성
-    def _process_image_with_location_id(self, transform, rootdir, category, location_id):
+    def _process_image_with_location_id(self, rootdir, category, location_id):
+        transform = self._get_transform_compose()
         iter = 0
         images = []
+        is_completed: bool = False
         for category_dir in os.listdir(self.root_dir): 
             category_path = os.path.join(self.root_dir, category_dir) # ./coord_dataset/category
-            if os.path.isdir(category_path) and category_dir is category: # 파라미터 카테고리와 같을 때
-                for location_id_dir in os.listdir(category_dir):
+            if os.path.isdir(category_path) and category_dir == category: # 파라미터 카테고리와 같을 때
+                for location_id_dir in os.listdir(category_path):
                     if str(location_id_dir) is location_id: # 해당 location id 일때
                         location_id_path = os.path.join(category_path, location_id_dir) # ./coord_dataset/category/location_id 
                         if os.path.isdir(location_id_path):
                             for filename in os.listdir(location_id_path):
                                 if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                                    with Image.open(filename).convert('RGB') as img:  # RGB로 변환
+                                    file_path = os.path.join(location_id_path, filename)
+                                    with Image.open(file_path).convert('RGB') as img:  # RGB로 변환
                                         img = transforms.ToTensor()(img)
                                         images.append({'image': img, 'label': iter}) # 원본 이미지
                                         self.label_dict[iter] = location_id_dir
@@ -72,37 +81,49 @@ class FeatureExtraction:
                                             images.append({'image': img_t, 'label': iter})
                                             self.label_dict[iter] = location_id_dir
                                             iter+=1
+                        is_completed = True
+                    if is_completed:
                         break
-            break
+            if is_completed:
+                break
+            
+        if not images:
+            raise ValueError(f"No images found for category '{category}' and '{location_id}'")
         self.save_label_dict(os.path.join(rootdir, category) + f"/{location_id}/vector-id.json") # 카테고리 내부, location id 내부에 vector id 파일 생성
         self.label_dict.clear()
         return images
-    def _process_image_with_category(self, transform, rootdir, category):
+    def _process_image_with_category(self, rootdir, category):
+        transform = self._get_transform_compose()
         iter = 0
         images = []  # 내부에서 리스트 초기화
         for category_dir in os.listdir(self.root_dir): 
             category_path = os.path.join(self.root_dir, category_dir) # ./coord_dataset/category
-            if os.path.isdir(category_path) and category_dir is category: # 파라미터 카테고리와 같을 때
-                for location_id_dir in os.listdir(category_dir): 
+            if os.path.isdir(category_path) and category_dir == category: # 파라미터 카테고리와 같을 때
+                for location_id_dir in os.listdir(category_path): 
                     location_id_path = os.path.join(category_path, location_id_dir) # ./coord_dataset/category/location_id 
                     if os.path.isdir(location_id_path):
                         for filename in os.listdir(location_id_path):
                             if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                                with Image.open(filename).convert('RGB') as img:  # RGB로 변환
+                                file_path = os.path.join(location_id_path, filename)
+                                with Image.open(file_path).convert('RGB') as img:  # RGB로 변환
                                     img = transforms.ToTensor()(img)
                                     images.append({'image': img, 'label': iter}) # 원본 이미지
                                     self.label_dict[iter] = location_id_dir
-                                    iter+=1
+                                    iter += 1
                                     img = transforms.ToPILImage()(img)
                                     for _ in range(16):  # 각 이미지에 대해 변형을 16 번 적용
                                         img_t = transform(img)
                                         images.append({'image': img_t, 'label': iter})
                                         self.label_dict[iter] = location_id_dir
-                                        iter+=1
-            break
+                                        iter += 1
+                break
+        if not images:
+            raise ValueError(f"No images found for category '{category}'")
         self.save_label_dict(os.path.join(rootdir, category) + "/vector-id.json") # 카테고리 내부에 vector id 파일 생성
         self.label_dict.clear()
         return images
+
+
 
 
     def save_label_dict(self, path):
@@ -110,11 +131,11 @@ class FeatureExtraction:
         import json
         with open(path, 'w') as file:
             json.dump(self.label_dict, file, indent=4)
-    def feature_extraction(self, category, location_id = ""):
+    async def feature_extraction(self, category, location_id = ""):
         if location_id == "":
-            images = self._process_image_with_category(transform=self._get_transform_compose(), rootdir=self.root_dir, category=category)
+            images = self._process_image_with_category(rootdir=self.root_dir, category=category)
         else:
-            images = self._process_image_with_location_id(transform=self._get_transform_compose(), rootdir=self.root_dir, category=category, location_id=location_id)
+            images = self._process_image_with_location_id(rootdir=self.root_dir, category=category, location_id=location_id)
         #Create Faiss index using FlatL2 type with 384 dimensions as this is the number of dimensions of the features
         dimension = 384
         index = faiss.IndexFlatL2(dimension)

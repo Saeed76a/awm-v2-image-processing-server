@@ -13,11 +13,12 @@ from typing import List
 # Location Id list 반환
 class RecommendData(BaseModel):
     location_id: str
-    image_base64: str
+    image_base64: str 
     candidate: str
     category: str
 class RecommendDataResponse(BaseModel):
     location_id: List[str]
+    
 router = APIRouter()
 
 # search similar image's coordinate

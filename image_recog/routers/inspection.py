@@ -31,9 +31,9 @@ def save_base64_image(base64_string: str, save_path: str) -> None:
 @router.post("/inspection/", response_model= InspectionResponse, tags=["inspection"])
 async def image_inspection(inspection_data: InspectionData, server: APIServer = Depends(get_api_server)):
     try:
-        location_id = InspectionData.location_id # string
-        image_bytes = InspectionData.image_base64 # base64 encoded string
-        category = InspectionData.category # string
+        location_id = inspection_data.location_id # string
+        image_bytes = inspection_data.image_base64 # base64 encoded string
+        category = inspection_data.category # string
 
         response = server.is_same_place(image_bytes=image_bytes, location_id=location_id, category=category)
 

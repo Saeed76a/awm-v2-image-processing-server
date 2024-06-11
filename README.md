@@ -1,4 +1,4 @@
-# Capstone Design Project / Any Where Map
+# Capstone Design Project / Anywhere Map
 This is the server related to image processing for AWM v2.
 
 ## 0. Introduction to Image Processing Server

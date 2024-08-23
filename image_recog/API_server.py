@@ -8,6 +8,13 @@ import io
 from PIL import Image
 from feature_extraction import FeatureExtraction
 import base64
+
+# for open ai chatbot
+from dotenv import load_dotenv
+from openai import OpenAI
+import os
+
+
 class Coordinate:
     def __init__(self, lat: str, long: str):
         self.lat = lat
@@ -15,6 +22,8 @@ class Coordinate:
 
 class APIServer:
     def __init__(self) -> None:
+        load_dotenv()
+
         self.device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
         self.processor = AutoImageProcessor.from_pretrained('facebook/dinov2-small')
         self.model = AutoModel.from_pretrained('facebook/dinov2-small').to(self.device)
@@ -23,6 +32,10 @@ class APIServer:
             device = self.device, 
             processor=self.processor, 
             model=self.model
+        )
+        self.OPENAI_API_KEY = os.environ.get("OPEN_API_KEY")
+        self.chatbot_client = OpenAI(
+            api_key=self.OPENAI_API_KEY
         )
 
     def get_similar_coordinate(self, image_bytes, candidate, category) -> list[str]:

@@ -12,7 +12,6 @@ from typing import List
 # 촬영한 사진과 유사한 k개의 사진 후보
 # Location Id list 반환
 class RecommendData(BaseModel):
-    location_id: str
     image_base64: str 
     candidate: str
     category: str

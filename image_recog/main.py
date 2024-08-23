@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from routers.recommend import router as recommendation_router
 from routers.inspection import router as inspection_router
 from routers.update import router as update_router
+from routers.chatting import router as chatting_router
 
 import logging
 
@@ -18,3 +19,4 @@ app = FastAPI()
 app.include_router(recommendation_router)
 app.include_router(inspection_router)
 app.include_router(update_router)
+app.include_router(chatting_router)
